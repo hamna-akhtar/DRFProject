@@ -10,7 +10,7 @@ class JournalEntrySerializer(serializers.ModelSerializer):
         model = JournalEntry
 
     created_at = serializers.ReadOnlyField()
-    author = serializers.ReadOnlyField(source='author.username')
+    author = UserMiniSerializer(read_only=True)
     shared_to = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.none(), many=True, write_only=True)
 
     class Meta:

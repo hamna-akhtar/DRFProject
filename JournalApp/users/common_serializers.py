@@ -6,4 +6,4 @@ class UserMiniSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ("id", "email", "username")
+        fields = ("id", "email", "first_name", "last_name")

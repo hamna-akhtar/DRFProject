@@ -17,9 +17,12 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from users.views import clerk_webhook
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/webhooks/', clerk_webhook),
     path('users/', include('users.urls')),
     path('journals/', include('journals.urls')),
     path('friend-requests/', include('friends.urls')),

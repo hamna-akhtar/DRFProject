@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.hashers import make_password
 from .models import CustomUser
 from journals.serializers import JournalEntrySerializer
 from .common_serializers import UserMiniSerializer
@@ -10,8 +11,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('id', 'username', 'first_name', 'last_name', 'email', 'friends', 'journal_entries')
-
+        fields = ('id', 'clerk_id', 'first_name', 'last_name', 'email', 'friends', 'journal_entries')
 
     # show all journal entries if own detail else show only public or entries shared with me
     def get_journal_entries(self, instance):
@@ -34,12 +34,3 @@ class UserSerializer(serializers.ModelSerializer):
         if not (instance == user or user in instance.friends.all()):
             return []
         return UserMiniSerializer(instance.friends.all(), many=True, context=self.context).data
-
-    # show friends list only if own detail page or if curr user is in friends list
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        request = self.context.get("request")
-        user = request.user
-        if not (instance == user or user in instance.friends.all()):
-            rep.pop("friends", None)
-        return rep

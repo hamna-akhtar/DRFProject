@@ -63,7 +63,7 @@ class RequestsSentView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsRequesterOrReceiverOrCreateOnly]
 
     def get_queryset(self):
-        sent = FriendRequest.objects.all().filter(requested_by=self.request.user)
+        sent = FriendRequest.objects.all().filter(requested_by=self.request.user).filter(accepted=False)
         return sent
 
 
@@ -72,5 +72,5 @@ class RequestsReceivedView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsRequesterOrReceiverOrCreateOnly]
 
     def get_queryset(self):
-        received = FriendRequest.objects.all().filter(requested_to=self.request.user)
+        received = FriendRequest.objects.all().filter(requested_to=self.request.user).filter(accepted=False)
         return received

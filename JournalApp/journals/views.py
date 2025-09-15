@@ -11,7 +11,6 @@ class JournalEntryListCreateView(generics.ListCreateAPIView):
     serializer_class = JournalEntrySerializer
     permission_classes = [permissions.IsAuthenticated, JournalPermission]
 
-
     def get_queryset(self):
         user = self.request.user
         my_journals = JournalEntry.objects.filter(author=user)
@@ -41,6 +40,16 @@ class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
         if access != "custom":
             journal.shared_to.clear()
 
+# class RemoveSharedUserView(generics.UpdateAPIView):
+#     serializer_class = JournalEntrySerializer
+#     permission_classes = [permissions.IsAuthenticated, JournalPermission]
+#     queryset = JournalEntry.objects.all()
+#
+#     def perform_update(self, serializer):
+#         user_id = self.request.data.get("user_id")
+#         journal = serializer.instance
+#         if user_id in journal.shared_to:
+#             journal.shared_to.remove(user_id)
 
 
 class MyJournalsView(generics.ListAPIView):
