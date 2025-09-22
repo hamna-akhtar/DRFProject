@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 **/migrations/*.py
 .env
+/llm_models/Phi-3-mini-4k-instruct-q4.gguf
