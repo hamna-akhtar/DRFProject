@@ -10,3 +10,8 @@ class JournalEntry(models.Model):
         choices=[('private', 'Private'), ('public', 'Public'), ('custom', 'Custom')],
         default='private')
     shared_to = models.ManyToManyField('users.CustomUser')
+
+class Task(models.Model):
+    created_at = models.DateField(auto_now_add=True)
+    created_by = models.ForeignKey('users.CustomUser', related_name='tasks', on_delete=models.CASCADE)
+    description = models.TextField()

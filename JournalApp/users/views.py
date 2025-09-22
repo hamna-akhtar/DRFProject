@@ -1,17 +1,11 @@
 from .models import CustomUser
 from friends.models import FriendRequest
-from django.shortcuts import get_object_or_404
 from .serializers import  UserSerializer
 from rest_framework import generics
 from .permissions import IsSelfOrReadOnly
 from rest_framework import permissions
-import json
-import hmac
-import hashlib
-from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.encoding import force_bytes
 import environ
 from svix.webhooks import Webhook, WebhookVerificationError
 
@@ -30,6 +24,7 @@ class MyProfileView(generics.RetrieveAPIView):
     def get_object(self):
         return self.request.user
 
+
 class UserDetailView(generics.RetrieveUpdateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
@@ -43,9 +38,6 @@ class DiscoverFriendsView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        print("user id: ",user.id)
-        print(CustomUser.objects.all())
-
 
         return (
             CustomUser.objects
@@ -62,29 +54,6 @@ class DiscoverFriendsView(generics.ListAPIView):
 
 env = environ.Env()
 CLERK_WEBHOOK_SIGNING_SECRET = env("CLERK_WEBHOOK_SIGNING_SECRET")
-
-def verify_clerk_signature(request):
-    signature_header = request.headers.get("svix-signature")
-    if not signature_header:
-        return False
-
-    # Extract the actual signature (format: "v1,signature")
-    signatures = {}
-    for pair in signature_header.split(','):
-        key, value = pair.split('=', 1)
-        signatures[key] = value
-
-    signature = signatures.get('v1')
-    if not signature:
-        return False
-
-    computed = hmac.new(
-        key=force_bytes(CLERK_WEBHOOK_SIGNING_SECRET),
-        msg=request.body,
-        digestmod=hashlib.sha256,
-    ).hexdigest()
-
-    return hmac.compare_digest(computed, signature)
 
 @csrf_exempt
 def clerk_webhook(request):

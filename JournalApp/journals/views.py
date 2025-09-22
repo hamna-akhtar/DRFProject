@@ -1,9 +1,18 @@
-from .models import JournalEntry
-from .serializers import JournalEntrySerializer
+from .models import JournalEntry, Task
+from .serializers import JournalEntrySerializer, TaskSerializer
+from .utils import extract_action_items
 from rest_framework import generics
 from .permissions import JournalPermission
 from rest_framework import permissions
 from datetime import datetime
+
+
+class TaskDeleteView(generics.DestroyAPIView):
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Task.objects.filter(created_by=self.request.user)
 
 
 
@@ -22,10 +31,14 @@ class JournalEntryListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         access = self.request.data.get("access")
         if access == "custom":
-            serializer.save(author=self.request.user, created_at=datetime.today())
+            journal = serializer.save(author=self.request.user, created_at=datetime.today())
         else:
-            serializer.save(author=self.request.user, created_at=datetime.today(), shared_to=[])
+           journal = serializer.save(author=self.request.user, created_at=datetime.today(), shared_to=[])
 
+        new_tasks = extract_action_items(journal.content)
+        for task_desc in new_tasks:
+            if not Task.objects.filter(created_by=self.request.user, description=task_desc.strip()).exists():
+                Task.objects.create(created_by=self.request.user, description=task_desc.strip())
 
 
 class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -40,16 +53,11 @@ class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
         if access != "custom":
             journal.shared_to.clear()
 
-# class RemoveSharedUserView(generics.UpdateAPIView):
-#     serializer_class = JournalEntrySerializer
-#     permission_classes = [permissions.IsAuthenticated, JournalPermission]
-#     queryset = JournalEntry.objects.all()
-#
-#     def perform_update(self, serializer):
-#         user_id = self.request.data.get("user_id")
-#         journal = serializer.instance
-#         if user_id in journal.shared_to:
-#             journal.shared_to.remove(user_id)
+        new_tasks = extract_action_items(journal.content)
+        for task_desc in new_tasks:
+            if not Task.objects.filter(created_by=self.request.user, description=task_desc.strip()).exists():
+                Task.objects.create(created_by=self.request.user, description=task_desc.strip())
+
 
 
 class MyJournalsView(generics.ListAPIView):
@@ -79,4 +87,3 @@ class PublicJournalsView(generics.ListAPIView):
     def get_queryset(self):
         public = JournalEntry.objects.all().filter(access='public').exclude(author=self.request.user)
         return public
-    

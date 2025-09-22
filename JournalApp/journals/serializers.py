@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import JournalEntry
+from .models import JournalEntry, Task
 from users.models import CustomUser
 from users.common_serializers import UserMiniSerializer
 
@@ -41,3 +41,10 @@ class JournalEntrySerializer(serializers.ModelSerializer):
         return rep
 
 
+class TaskSerializer(serializers.ModelSerializer):
+    created_by = UserMiniSerializer(read_only=True)
+    created_at = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Task
+        fields = [ 'id', 'created_at', 'created_by', 'description']
