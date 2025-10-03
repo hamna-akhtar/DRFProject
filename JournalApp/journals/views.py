@@ -37,8 +37,9 @@ class JournalEntryListCreateView(generics.ListCreateAPIView):
 
         new_tasks = extract_action_items(journal.content)
         for task_desc in new_tasks:
-            if not (Task.objects.filter(created_by=self.request.user, description=task_desc.strip()).exists() or task_desc == 'None'):
-                Task.objects.create(created_by=self.request.user, description=task_desc.strip())
+            desc = task_desc.strip()
+            if desc and desc != 'None' and not Task.objects.filter(created_by=self.request.user, description=desc).exists():
+                Task.objects.create(created_by=self.request.user, description=desc)
 
 
 class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -55,8 +56,9 @@ class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         new_tasks = extract_action_items(journal.content)
         for task_desc in new_tasks:
-            if not (Task.objects.filter(created_by=self.request.user, description=task_desc.strip()).exists() or task_desc == 'None'):
-                Task.objects.create(created_by=self.request.user, description=task_desc.strip())
+            desc = task_desc.strip()
+            if desc and desc != 'None' and not Task.objects.filter(created_by=self.request.user,description=desc).exists():
+                Task.objects.create(created_by=self.request.user, description=desc)
 
 
 
