@@ -9,7 +9,8 @@ from svix.webhooks import WebhookVerificationError
 from unittest.mock import patch, Mock
 import json
 
-class UserViewsTests(TestCase):
+
+class UserListViewTests(TestCase):
 
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -23,7 +24,6 @@ class UserViewsTests(TestCase):
             email="user3@gmail.com", password="mnopqr"
         )
 
-    # UserListView
     def test_user_list_requires_authentication(self):
         view = views.UserListView.as_view()
         request = self.factory.get("/users/")
@@ -50,7 +50,18 @@ class UserViewsTests(TestCase):
         self.assertIn("user2@gmail.com", emails)
         self.assertIn("user3@gmail.com", emails)
 
-    # MyProfileView
+
+class MyProfileViewTests(TestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user1 = CustomUser.objects.create(
+            email="user1@gmail.com", password="abcdef"
+        )
+        self.user2 = CustomUser.objects.create(
+            email="user2@gmail.com", password="ghijkl"
+        )
+
     def test_my_profile_requires_authentication(self):
         view = views.MyProfileView.as_view()
         request = self.factory.get("/users/my-profile/")
@@ -81,7 +92,18 @@ class UserViewsTests(TestCase):
         self.assertEqual(journal.id, response.data["journal_entries"][0]["id"])
         self.assertEqual(self.user2.id, response.data["friends"][0]["id"])
 
-    # UserDetailView
+
+class UserDetailViewTests(TestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user1 = CustomUser.objects.create(
+            email="user1@gmail.com", password="abcdef"
+        )
+        self.user2 = CustomUser.objects.create(
+            email="user2@gmail.com", password="ghijkl"
+        )
+
     def test_user_detail_requires_authentication(self):
         view = views.UserDetailView.as_view()
         request = self.factory.get(f"/users/{self.user1.id}/")
@@ -122,7 +144,21 @@ class UserViewsTests(TestCase):
         response = view(request, pk=self.user1.pk)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    # DiscoverFriendsView
+
+class DiscoverFriendsViewTests(TestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user1 = CustomUser.objects.create(
+            email="user1@gmail.com", password="abcdef"
+        )
+        self.user2 = CustomUser.objects.create(
+            email="user2@gmail.com", password="ghijkl"
+        )
+        self.user3 = CustomUser.objects.create(
+            email="user3@gmail.com", password="mnopqr"
+        )
+
     def test_discover_friends_requires_authentication(self):
         view = views.DiscoverFriendsView.as_view()
         request = self.factory.get("/users/discover/")

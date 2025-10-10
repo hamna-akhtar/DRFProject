@@ -7,7 +7,7 @@ from .. import views
 from datetime import date
 
 
-class FriendRequestViewsTests(TestCase):
+class FriendRequestListCreateViewTests(TestCase):
 
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -21,7 +21,6 @@ class FriendRequestViewsTests(TestCase):
             email="user3@gmail.com", password="mnopqr"
         )
 
-    # FriendRequestListCreateView
     def test_friend_request_list_requires_authentication(self):
         view = views.FriendRequestListCreateView.as_view()
         request = self.factory.get("/friends/")
@@ -85,7 +84,21 @@ class FriendRequestViewsTests(TestCase):
         self.assertEqual(friend_request.requested_to, self.user2)
         self.assertEqual(friend_request.created_at, date.today())
 
-    # FriendRequestDetailView
+
+class FriendRequestDetailViewTests(TestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user1 = CustomUser.objects.create(
+            email="user1@gmail.com", password="abcdef"
+        )
+        self.user2 = CustomUser.objects.create(
+            email="user2@gmail.com", password="ghijkl"
+        )
+        self.user3 = CustomUser.objects.create(
+            email="user3@gmail.com", password="mnopqr"
+        )
+
     def test_friend_request_detail_requires_authentication(self):
         friend_request = FriendRequest.objects.create(
             requested_by=self.user1, requested_to=self.user2
@@ -256,7 +269,21 @@ class FriendRequestViewsTests(TestCase):
         self.assertNotIn(self.user1, self.user2.friends.all())
         self.assertNotIn(self.user2, self.user1.friends.all())
 
-    # RequestsSentView
+
+class RequestsSentViewTests(TestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user1 = CustomUser.objects.create(
+            email="user1@gmail.com", password="abcdef"
+        )
+        self.user2 = CustomUser.objects.create(
+            email="user2@gmail.com", password="ghijkl"
+        )
+        self.user3 = CustomUser.objects.create(
+            email="user3@gmail.com", password="mnopqr"
+        )
+
     def test_requests_sent_requires_authentication(self):
         view = views.RequestsSentView.as_view()
         request = self.factory.get("/friend-requests/sent/")
@@ -306,7 +333,21 @@ class FriendRequestViewsTests(TestCase):
         self.assertIn(pending.id, request_ids)
         self.assertNotIn(accepted.id, request_ids)
 
-    # RequestsReceivedView
+
+class RequestsReceivedViewTests(TestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user1 = CustomUser.objects.create(
+            email="user1@gmail.com", password="abcdef"
+        )
+        self.user2 = CustomUser.objects.create(
+            email="user2@gmail.com", password="ghijkl"
+        )
+        self.user3 = CustomUser.objects.create(
+            email="user3@gmail.com", password="mnopqr"
+        )
+
     def test_requests_received_requires_authentication(self):
         view = views.RequestsReceivedView.as_view()
         request = self.factory.get("/friend-requests/received/")
