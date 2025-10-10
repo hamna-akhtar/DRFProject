@@ -99,7 +99,7 @@ def clerk_webhook(request):
             CustomUser.objects.update_or_create(
                 clerk_id=clerk_id,
                 defaults={
-                    "email": email or "",
+                    "email": email,
                     "first_name": first_name or "",
                     "last_name": last_name or ""
                 },
