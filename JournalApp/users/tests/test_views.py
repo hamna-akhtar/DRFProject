@@ -1,30 +1,22 @@
-from django.test import TestCase
-from rest_framework.test import APIRequestFactory, force_authenticate
-from rest_framework import status
-from ..models import CustomUser
-from .. import views
-from journals.models import JournalEntry
-from friends.models import FriendRequest
-from svix.webhooks import WebhookVerificationError
-from unittest.mock import patch, Mock
+""" tests for users views """
+
 import json
+from unittest.mock import patch, Mock
+from rest_framework.test import force_authenticate
+from rest_framework import status
+from svix.webhooks import WebhookVerificationError
+from journals.models import JournalEntry
+from tests.base import CustomBaseTestCase
+from friends.models import FriendRequest
+from users.models import CustomUser
+from users import views
 
 
-class UserListViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
-        self.user3 = CustomUser.objects.create(
-            email="user3@gmail.com", password="mnopqr"
-        )
+class UserListViewTests(CustomBaseTestCase):
+    """tests for UserListView"""
 
     def test_user_list_requires_authentication(self):
+        """only authenticated users can request users list"""
         view = views.UserListView.as_view()
         request = self.factory.get("/users/")
 
@@ -38,6 +30,7 @@ class UserListViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_user_list_returns_all_users(self):
+        """all users are returned in list"""
         request = self.factory.get("/users/")
         force_authenticate(request, user=self.user1)
         view = views.UserListView.as_view()
@@ -51,18 +44,11 @@ class UserListViewTests(TestCase):
         self.assertIn("user3@gmail.com", emails)
 
 
-class MyProfileViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
+class MyProfileViewTests(CustomBaseTestCase):
+    """tests for the MyProfileView"""
 
     def test_my_profile_requires_authentication(self):
+        """only authenticated users can request their profile view"""
         view = views.MyProfileView.as_view()
         request = self.factory.get("/users/my-profile/")
 
@@ -76,6 +62,7 @@ class MyProfileViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_my_profile_returns_current_user(self):
+        """current user is returned"""
         journal = JournalEntry.objects.create(
             author=self.user1, content="Private", access="private"
         )
@@ -93,18 +80,11 @@ class MyProfileViewTests(TestCase):
         self.assertEqual(self.user2.id, response.data["friends"][0]["id"])
 
 
-class UserDetailViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
+class UserDetailViewTests(CustomBaseTestCase):
+    """tests for the UserDetailView"""
 
     def test_user_detail_requires_authentication(self):
+        """only authenticated users can request user detail view"""
         view = views.UserDetailView.as_view()
         request = self.factory.get(f"/users/{self.user1.id}/")
 
@@ -118,6 +98,7 @@ class UserDetailViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_user_detail_returns_correct_user(self):
+        """returns requested user"""
         request = self.factory.get(f"/users/{self.user2.pk}/")
         force_authenticate(request, user=self.user1)
         view = views.UserDetailView.as_view()
@@ -128,6 +109,7 @@ class UserDetailViewTests(TestCase):
         self.assertEqual(response.data["email"], "user2@gmail.com")
 
     def test_user_detail_can_update_own_profile_only(self):
+        """users can update only their own profile"""
         data = {"first_name": "new"}
         request = self.factory.patch(f"/users/{self.user1.id}/", data, format="json")
         view = views.UserDetailView.as_view()
@@ -145,21 +127,11 @@ class UserDetailViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
-class DiscoverFriendsViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
-        self.user3 = CustomUser.objects.create(
-            email="user3@gmail.com", password="mnopqr"
-        )
+class DiscoverFriendsViewTests(CustomBaseTestCase):
+    """tests for the DiscoverFriendsView"""
 
     def test_discover_friends_requires_authentication(self):
+        """only authenticated users can view discover friends"""
         view = views.DiscoverFriendsView.as_view()
         request = self.factory.get("/users/discover/")
 
@@ -173,6 +145,7 @@ class DiscoverFriendsViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_discover_friends_excludes_self_and_already_requested_users(self):
+        """self and already requested users are excluded from discover friends"""
         user4 = CustomUser.objects.create(email="user4@gmail.com", password="stuvw")
         FriendRequest.objects.create(requested_by=self.user1, requested_to=self.user2)
         FriendRequest.objects.create(requested_by=self.user3, requested_to=self.user1)
@@ -190,13 +163,12 @@ class DiscoverFriendsViewTests(TestCase):
         self.assertIn(user4.id, user_ids)
 
 
-class ClerkWebhookTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
+class ClerkWebhookTests(CustomBaseTestCase):
+    """tests for the Clerk webhook view"""
 
     @patch("users.views.Webhook")
     def test_webhook_creates_new_user(self, mock_webhook_class):
+        """create a new user on receiving user.created webhook"""
         mock_webhook = Mock()
         mock_webhook_class.return_value = mock_webhook
         mock_webhook.verify.return_value = {
@@ -229,6 +201,7 @@ class ClerkWebhookTests(TestCase):
 
     @patch("users.views.Webhook")
     def test_webhook_updates_existing_user(self, mock_webhook_class):
+        """update existing user on receiving user.updated webhook"""
         CustomUser.objects.create(
             email="old@gmail.com",
             clerk_id="123456",
@@ -267,6 +240,7 @@ class ClerkWebhookTests(TestCase):
 
     @patch("users.views.Webhook")
     def test_webhook_deletes_user(self, mock_webhook_class):
+        """delete existing user on receiving user.deleted webhook"""
         CustomUser.objects.create(
             email="user@gmail.com", clerk_id="123456", password="abcdef"
         )
@@ -292,6 +266,7 @@ class ClerkWebhookTests(TestCase):
         self.assertFalse(CustomUser.objects.filter(clerk_id="123456").exists())
 
     def test_webhook_rejects_non_post_requests(self):
+        """reject all except post requests"""
         request = self.factory.get("/api/webhooks/")
         response = views.clerk_webhook(request)
 
@@ -300,6 +275,7 @@ class ClerkWebhookTests(TestCase):
         self.assertEqual(data["error"], "Invalid method")
 
     def test_webhook_rejects_missing_svix_headers(self):
+        """reject requests missing required svix headers"""
         request = self.factory.post(
             "/api/webhooks/", data=json.dumps({}), content_type="application/json"
         )
@@ -311,6 +287,7 @@ class ClerkWebhookTests(TestCase):
 
     @patch("users.views.Webhook")
     def test_webhook_handles_update_or_create_for_new_user(self, mock_webhook_class):
+        """update existing user on receiving user.updated webhook if user already exists"""
         self.assertFalse(CustomUser.objects.filter(clerk_id="123456").exists())
 
         mock_webhook = Mock()
@@ -340,6 +317,7 @@ class ClerkWebhookTests(TestCase):
 
     @patch("users.views.Webhook")
     def test_webhook_handles_get_or_create_for_existing_user(self, mock_webhook_class):
+        """get existing user on receiving user.created webhook if user already exists"""
         CustomUser.objects.create(
             email="user@gmail.com",
             clerk_id="123456",
@@ -372,6 +350,7 @@ class ClerkWebhookTests(TestCase):
 
     @patch("users.views.Webhook")
     def test_webhook_handles_invalid_signature(self, mock_webhook_class):
+        """invalid svix signatures raise verification error"""
         mock_webhook = Mock()
         mock_webhook_class.return_value = mock_webhook
         mock_webhook.verify.side_effect = WebhookVerificationError("Invalid signature")
@@ -395,6 +374,7 @@ class ClerkWebhookTests(TestCase):
     def test_webhook_handles_exception_for_missing_user_required_fields(
         self, mock_webhook_class
     ):
+        """catch exception when webhook data lacks required user fields"""
         mock_webhook = Mock()
         mock_webhook_class.return_value = mock_webhook
         mock_webhook.verify.return_value = {
@@ -416,6 +396,7 @@ class ClerkWebhookTests(TestCase):
 
     @patch("users.views.Webhook")
     def test_webhook_returns_success_response(self, mock_webhook_class):
+        """return success response when processed correctly"""
         mock_webhook = Mock()
         mock_webhook_class.return_value = mock_webhook
         mock_webhook.verify.return_value = {
