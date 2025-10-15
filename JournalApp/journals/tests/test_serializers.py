@@ -1,33 +1,16 @@
-from rest_framework.request import Request
-from rest_framework.test import APIRequestFactory, force_authenticate
-from django.test import TestCase
-from users.models import CustomUser
-from ..models import JournalEntry, Task
+""" tests for journals serializers """
+
 from datetime import date
-from ..serializers import JournalEntrySerializer, TaskSerializer
+from tests.base import CustomBaseTestCase
+from journals.models import JournalEntry, Task
+from journals.serializers import JournalEntrySerializer, TaskSerializer
 
 
-class JournalSerializerTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
-        self.user3 = CustomUser.objects.create(
-            email="user3@gmail.com", password="mnopqr"
-        )
-
-    def create_request_context(self, user):
-        request = self.factory.get("/")
-        force_authenticate(request, user=user)
-        request.user = user
-        return {"request": Request(request)}
+class JournalSerializerTests(CustomBaseTestCase):
+    """tests for JournalEntrySerializer"""
 
     def test_serialize_journal_basic_fields(self):
+        """correctly serialize basic fields of a journal entry"""
         journal = JournalEntry.objects.create(
             author=self.user1,
             title="abc",
@@ -46,6 +29,7 @@ class JournalSerializerTests(TestCase):
         self.assertEqual(data["created_at"], date.today())
 
     def test_serialize_author_as_nested_user_mini_object(self):
+        """serialize author as user mini object"""
         journal = JournalEntry.objects.create(
             author=self.user1,
             title="abc",
@@ -66,6 +50,7 @@ class JournalSerializerTests(TestCase):
         self.assertEqual(data["author"]["last_name"], self.user1.last_name)
 
     def test_serialize_shared_to_as_nested_objects_for_read(self):
+        """serialize shared_to as nested objects"""
         journal = JournalEntry.objects.create(
             author=self.user1, content="abc", access="custom"
         )
@@ -83,8 +68,8 @@ class JournalSerializerTests(TestCase):
         self.assertIsInstance(data["shared_to"][1], dict)
         self.assertEqual(len(data["author"].keys()), 4)
 
-
     def test_serialize_shared_to_only_visible_to_author_and_shared_user(self):
+        """shared_to field is only visible to author and shared user"""
         journal = JournalEntry.objects.create(
             author=self.user1, title="abc", content="def", access="custom"
         )
@@ -111,6 +96,7 @@ class JournalSerializerTests(TestCase):
         self.assertNotIn("shared_to", data)
 
     def test_serialize_shared_to_hidden_for_non_custom_access(self):
+        """shared_to field is not visible for public and private access"""
         public = JournalEntry.objects.create(
             author=self.user1, content="abc", access="public"
         )
@@ -131,6 +117,7 @@ class JournalSerializerTests(TestCase):
         self.assertNotIn("shared_to", data)
 
     def test_serialize_created_at_is_read_only(self):
+        """created_at is read only field"""
         journal = JournalEntry.objects.create(
             author=self.user1, title="abc", content="def", access="public"
         )
@@ -140,6 +127,7 @@ class JournalSerializerTests(TestCase):
         self.assertTrue(serializer.fields["created_at"].read_only)
 
     def test_deserialize_valid_private_journal(self):
+        """deserialize valid private journal entry data"""
         context = self.create_request_context(self.user1)
         data = {"title": "abc", "content": "def", "access": "private", "shared_to": []}
 
@@ -150,6 +138,7 @@ class JournalSerializerTests(TestCase):
         self.assertEqual(serializer.validated_data["access"], "private")
 
     def test_deserialize_valid_custom_journal_with_shared_to(self):
+        """deserialize valid shared journal entry data"""
         context = self.create_request_context(self.user1)
         data = {
             "title": "abc",
@@ -163,6 +152,7 @@ class JournalSerializerTests(TestCase):
         self.assertEqual(len(serializer.validated_data["shared_to"]), 2)
 
     def test_deserialize_shared_to_queryset_excludes_current_user(self):
+        """shared_to queryset excludes currently authenticated user"""
         context = self.create_request_context(self.user1)
         serializer = JournalEntrySerializer(context=context)
 
@@ -176,6 +166,7 @@ class JournalSerializerTests(TestCase):
         self.assertIn(self.user3, queryset)
 
     def test_deserialize_invalid_access_choice(self):
+        """reject invalid access choice during deserialization"""
         context = self.create_request_context(self.user1)
         data = {"title": "abc", "content": "def", "access": "invalid", "shared_to": []}
 
@@ -184,6 +175,7 @@ class JournalSerializerTests(TestCase):
         self.assertIn("access", serializer.errors)
 
     def test_deserialize_content_required(self):
+        """content field is required for deserializing"""
         context = self.create_request_context(self.user1)
         data = {
             "title": "abc",
@@ -196,6 +188,7 @@ class JournalSerializerTests(TestCase):
         self.assertIn("content", serializer.errors)
 
     def test_deserialize_title_optional(self):
+        """title field is optional for deserializing"""
         context = self.create_request_context(self.user1)
         data = {
             "content": "abc",
@@ -207,6 +200,7 @@ class JournalSerializerTests(TestCase):
         self.assertTrue(serializer.is_valid())
 
     def test_deserialize_invalid_shared_to_user_ids(self):
+        """reject invalid shared to users"""
         context = self.create_request_context(self.user1)
         data = {
             "title": "abc",
@@ -220,6 +214,7 @@ class JournalSerializerTests(TestCase):
         self.assertIn("shared_to", serializer.errors)
 
     def test_update_journal(self):
+        """journal entry title, content, access and shared_to list can all be updated by author"""
         journal = JournalEntry.objects.create(
             author=self.user1, title="old", content="abc", access="private"
         )
@@ -236,6 +231,7 @@ class JournalSerializerTests(TestCase):
         self.assertEqual(updated_journal.content, "def")
 
     def test_partial_update_journal(self):
+        """partial update of journal entry can be done by author"""
         journal = JournalEntry.objects.create(
             author=self.user1, title="old", content="abc", access="private"
         )
@@ -252,24 +248,11 @@ class JournalSerializerTests(TestCase):
         self.assertEqual(updated_journal.content, "abc")
 
 
-class TaskSerializerTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
-
-    def create_request_context(self, user):
-        request = self.factory.get("/")
-        force_authenticate(request, user=user)
-        request.user = user
-        return {"request": Request(request)}
+class TaskSerializerTests(CustomBaseTestCase):
+    """tests for TaskSerializer"""
 
     def test_serialize_task_basic_fields(self):
+        """correctly serialize basic fields of a task"""
         task = Task.objects.create(created_by=self.user1, description="abc")
 
         context = self.create_request_context(self.user1)
@@ -281,6 +264,7 @@ class TaskSerializerTests(TestCase):
         self.assertEqual(data["created_at"], date.today())
 
     def test_serialize_created_by_as_nested_object(self):
+        """serialize created by as a nested object"""
         task = Task.objects.create(created_by=self.user1, description="abc")
 
         context = self.create_request_context(self.user1)
@@ -291,6 +275,7 @@ class TaskSerializerTests(TestCase):
         self.assertIsInstance(data["created_by"], dict)
 
     def test_serialize_created_by_and_created_at_are_read_only(self):
+        """serialize created_by and created_at as read only"""
         task = Task.objects.create(created_by=self.user1, description="abc")
         context = self.create_request_context(self.user1)
         serializer = TaskSerializer(task, context=context)
@@ -299,6 +284,7 @@ class TaskSerializerTests(TestCase):
         self.assertTrue(serializer.fields["created_by"].read_only)
 
     def test_deserialize_valid_task(self):
+        """deserialize valid task data"""
         context = self.create_request_context(self.user1)
         data = {"description": "abc"}
 
@@ -307,6 +293,7 @@ class TaskSerializerTests(TestCase):
         self.assertEqual(serializer.validated_data["description"], "abc")
 
     def test_deserialize_description_required(self):
+        """description field is required for deserializing"""
         context = self.create_request_context(self.user1)
         # no description is invalid
         data = {}
@@ -322,6 +309,7 @@ class TaskSerializerTests(TestCase):
         self.assertIn("description", serializer.errors)
 
     def test_update_task_description(self):
+        """update task's description field"""
         task = Task.objects.create(created_by=self.user1, description="old")
 
         context = self.create_request_context(self.user1)
@@ -333,6 +321,7 @@ class TaskSerializerTests(TestCase):
         self.assertEqual(updated_task.description, "new")
 
     def test_serialize_multiple_tasks(self):
+        """serialize multiple tasks correctly"""
         Task.objects.create(created_by=self.user1, description="task 1")
         Task.objects.create(created_by=self.user1, description="task 2")
         Task.objects.create(created_by=self.user1, description="task 3")

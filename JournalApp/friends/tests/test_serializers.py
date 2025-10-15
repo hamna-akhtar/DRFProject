@@ -1,32 +1,15 @@
-from django.test import TestCase
-from rest_framework.test import APIRequestFactory, force_authenticate
-from rest_framework.request import Request
-from users.models import CustomUser
-from ..models import FriendRequest
-from ..serializers import FriendRequestSerializer, FriendAcceptSerializer
+"""tests for friends serializers"""
+
+from tests.base import CustomBaseTestCase
+from friends.models import FriendRequest
+from friends.serializers import FriendRequestSerializer, FriendAcceptSerializer
 
 
-class FriendRequestSerializerTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
-        self.user3 = CustomUser.objects.create(
-            email="user3@gmail.com", password="mnopqr"
-        )
-
-    def create_request_context(self, user):
-        request = self.factory.get("/")
-        force_authenticate(request, user=user)
-        request.user = user
-        return {"request": Request(request)}
+class FriendRequestSerializerTests(CustomBaseTestCase):
+    """tests for FriendRequestSerializer"""
 
     def test_serialize_friend_request_includes_all_fields(self):
+        """serialized FriendRequest includes all expected fields and excludes write-only ones"""
         friend_request = FriendRequest.objects.create(
             requested_by=self.user1, requested_to=self.user2
         )
@@ -42,6 +25,7 @@ class FriendRequestSerializerTests(TestCase):
         self.assertNotIn("send_request_to", data)
 
     def test_serialize_request_from_and_request_to_as_nested_objects(self):
+        """request_from and request_to are represented as nested user objects"""
         friend_request = FriendRequest.objects.create(
             requested_by=self.user1, requested_to=self.user2
         )
@@ -53,6 +37,7 @@ class FriendRequestSerializerTests(TestCase):
         self.assertIsInstance(data["request_to"], dict)
 
     def test_serialize_created_at_and_accepted_are_read_only(self):
+        """created_at and accepted fields are read only"""
         friend_request = FriendRequest.objects.create(
             requested_by=self.user1, requested_to=self.user2
         )
@@ -63,6 +48,7 @@ class FriendRequestSerializerTests(TestCase):
         self.assertTrue(serializer.fields["created_at"].read_only)
 
     def test_deserialize_valid_friend_request(self):
+        """deserialize valid friend request data and map to correct users"""
         context = self.create_request_context(self.user1)
         data = {"send_request_to": self.user2.id}
 
@@ -71,6 +57,7 @@ class FriendRequestSerializerTests(TestCase):
         self.assertEqual(serializer.validated_data["requested_to"], self.user2)
 
     def test_deserialize_send_request_to_is_required(self):
+        """send_request_to field is required for deserializing"""
         context = self.create_request_context(self.user1)
         data = {}
 
@@ -78,9 +65,10 @@ class FriendRequestSerializerTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("send_request_to", serializer.errors)
 
-    def test_deserialize_queryset_excludes_current_user_and_existing_sent_and_received_requests_users(
+    def test_deserialize_queryset_excludes_current_user_and_already_requested_users(
         self,
     ):
+        """queryset for send_request_to excludes current user and already requested users"""
         FriendRequest.objects.create(requested_by=self.user1, requested_to=self.user2)
         FriendRequest.objects.create(requested_by=self.user3, requested_to=self.user1)
 
@@ -94,6 +82,7 @@ class FriendRequestSerializerTests(TestCase):
         self.assertNotIn(self.user3, queryset)
 
     def test_deserialize_invalid_user_id(self):
+        """reject invalid user_id as receiver when deserializing"""
         context = self.create_request_context(self.user1)
         data = {"send_request_to": 99999}
 
@@ -102,6 +91,7 @@ class FriendRequestSerializerTests(TestCase):
         self.assertIn("send_request_to", serializer.errors)
 
     def test_deserialize_cannot_set_accepted(self):
+        """cannot manually set accepted field when creating friend request"""
         context = self.create_request_context(self.user1)
         data = {
             "send_request_to": self.user2.id,
@@ -113,17 +103,11 @@ class FriendRequestSerializerTests(TestCase):
         self.assertNotIn("accepted", serializer.validated_data)
 
 
-class FriendAcceptSerializerTests(TestCase):
-
-    def setUp(self):
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
+class FriendAcceptSerializerTests(CustomBaseTestCase):
+    """tests for FriendAcceptSerializer"""
 
     def test_serialize_only_accepted_field(self):
+        """only serialize the accepted field"""
         friend_request = FriendRequest.objects.create(
             requested_by=self.user1, requested_to=self.user2
         )
@@ -134,6 +118,7 @@ class FriendAcceptSerializerTests(TestCase):
         self.assertIn("accepted", data)
 
     def test_deserialize_accept_request(self):
+        """correctly validate and accept friend request"""
         friend_request = FriendRequest.objects.create(
             requested_by=self.user1, requested_to=self.user2
         )
@@ -144,6 +129,7 @@ class FriendAcceptSerializerTests(TestCase):
         self.assertTrue(serializer.validated_data["accepted"])
 
     def test_deserialize_unaccept_request(self):
+        """correctly validate and unaccept friend request"""
         friend_request = FriendRequest.objects.create(
             requested_by=self.user1, requested_to=self.user2, accepted=True
         )

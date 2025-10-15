@@ -1,28 +1,19 @@
+""" tests for journals views """
+
+from datetime import date
 from unittest.mock import patch
 from rest_framework import status
-from rest_framework.test import APIRequestFactory, force_authenticate
-from django.test import TestCase
-from .. import views
-from users.models import CustomUser
-from ..models import JournalEntry, Task
-from datetime import date
+from rest_framework.test import force_authenticate
+from tests.base import CustomBaseTestCase
+from journals import views
+from journals.models import JournalEntry, Task
 
 
-class JournalEntryListCreateViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
-        self.user3 = CustomUser.objects.create(
-            email="user3@gmail.com", password="mnopqr"
-        )
+class JournalEntryListCreateViewTests(CustomBaseTestCase):
+    """tests for JournalEntryListCreateView"""
 
     def test_journal_list_create_requires_authentication(self):
+        """only authenticated users can list/create journal entries"""
         view = views.JournalEntryListCreateView.as_view()
         request = self.factory.get("journals/")
 
@@ -36,6 +27,7 @@ class JournalEntryListCreateViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_journal_list_includes_my_shared_public(self):
+        """journal entry list includes own, shared and public journals"""
         my = JournalEntry.objects.create(
             title="my", content="abc", author=self.user1, access="private"
         )
@@ -62,6 +54,7 @@ class JournalEntryListCreateViewTests(TestCase):
     def test_journal_create_creates_tasks_and_sets_author_and_created_at(
         self, mock_extract
     ):
+        """set author, date, and create extracted tasks on journal entry creation"""
         mock_extract.return_value = ["Task1", "Task2"]
 
         data = {"title": "title", "content": "abc", "access": "public", "shared_to": []}
@@ -81,6 +74,7 @@ class JournalEntryListCreateViewTests(TestCase):
     def test_journal_create_keeps_shared_to_if_custom_access_else_clears(
         self, mock_extract
     ):
+        """preserve shared_to list for custom access journals only"""
         mock_extract.return_value = ["Task1", "Task2"]
         view = views.JournalEntryListCreateView.as_view()
 
@@ -133,21 +127,11 @@ class JournalEntryListCreateViewTests(TestCase):
         self.assertEqual(new_journal.shared_to.count(), 0)
 
 
-class JournalEntryDetailViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
-        self.user3 = CustomUser.objects.create(
-            email="user3@gmail.com", password="mnopqr"
-        )
+class JournalEntryDetailViewTests(CustomBaseTestCase):
+    """tests for JournalEntryDetailView"""
 
     def test_journal_retrieve_private_by_author_only(self):
+        """private journal entry can be retrieved by author"""
         view = views.JournalEntryDetailView.as_view()
         journal = JournalEntry.objects.create(
             title="title", content="abc", author=self.user1, access="private"
@@ -165,6 +149,7 @@ class JournalEntryDetailViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_journal_retrieve_public_by_all(self):
+        """public journal entry can be retrieved by all authenticated users"""
         view = views.JournalEntryDetailView.as_view()
         journal = JournalEntry.objects.create(
             title="title", content="abc", author=self.user1, access="public"
@@ -182,6 +167,7 @@ class JournalEntryDetailViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_journal_retrieve_custom_by_author_and_by_shared_to_only(self):
+        """shared journal entry can be retrieved by author and shared user only"""
         view = views.JournalEntryDetailView.as_view()
         journal = JournalEntry.objects.create(
             title="title", content="abc", author=self.user1, access="custom"
@@ -208,6 +194,7 @@ class JournalEntryDetailViewTests(TestCase):
     def test_journal_update_clears_shared_to_if_access_changed_from_custom(
         self, mock_extract
     ):
+        """clear shared_to list if access is updated from custom to public/private"""
         mock_extract.return_value = ["Task1", "Task2"]
 
         journal = JournalEntry.objects.create(
@@ -233,6 +220,7 @@ class JournalEntryDetailViewTests(TestCase):
     def test_journal_update_keeps_shared_to_if_access_changed_to_custom(
         self, mock_extract
     ):
+        """preserve shared_to if access is updated from public/private to custom"""
         mock_extract.return_value = ["Task1", "Task2"]
 
         journal = JournalEntry.objects.create(
@@ -256,6 +244,7 @@ class JournalEntryDetailViewTests(TestCase):
 
     @patch("journals.views.extract_action_items")
     def test_journal_delete_by_author_only(self, mock_extract):
+        """journal entry can be deleted by author only"""
         mock_extract.return_value = ["Task1", "Task2"]
 
         view = views.JournalEntryDetailView.as_view()
@@ -281,18 +270,11 @@ class JournalEntryDetailViewTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
 
-class MyJournalsViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
+class MyJournalsViewTests(CustomBaseTestCase):
+    """tests for MyJournalsView"""
 
     def test_my_journals(self):
+        """return only journals created by currently authenticated user"""
         user1_journal = JournalEntry.objects.create(
             title="user1 journal", content="abc", author=self.user1
         )
@@ -321,29 +303,34 @@ class MyJournalsViewTests(TestCase):
         self.assertNotIn(user1_journal.id, returned_ids)
 
 
-class PublicJournalsViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
+class PublicJournalsViewTests(CustomBaseTestCase):
+    """tests for PublicJournalsView"""
 
     def test_public_journals_shows_all_public_journals_except_own(self):
+        """return all public journals except those created by currently authenticated user"""
         public_own = JournalEntry.objects.create(
-            title="user1 public journal", content="abc", author=self.user1, access="public"
+            title="user1 public journal",
+            content="abc",
+            author=self.user1,
+            access="public",
         )
         public_other = JournalEntry.objects.create(
-            title="user2 public journal", content="abc", author=self.user2, access="public"
+            title="user2 public journal",
+            content="abc",
+            author=self.user2,
+            access="public",
         )
         private = JournalEntry.objects.create(
-            title="user1 private journal", content="abc", author=self.user1, access="private"
+            title="user1 private journal",
+            content="abc",
+            author=self.user1,
+            access="private",
         )
         shared = JournalEntry.objects.create(
-            title="user1 shared journal", content="abc", author=self.user1, access="custom"
+            title="user1 shared journal",
+            content="abc",
+            author=self.user1,
+            access="custom",
         )
 
         request = self.factory.get("journals/public")
@@ -362,18 +349,11 @@ class PublicJournalsViewTests(TestCase):
         self.assertNotIn(shared.id, returned_ids)
 
 
-class SharedWithMeViewTests(TestCase):
-
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
+class SharedWithMeViewTests(CustomBaseTestCase):
+    """tests for SharedWithMeView"""
 
     def test_shared_with_me_journals(self):
+        """return only journals shared to currently authenticated user"""
         shared = JournalEntry.objects.create(
             title="user1 shared with user2",
             content="abc",
@@ -409,21 +389,13 @@ class SharedWithMeViewTests(TestCase):
         self.assertNotIn(public.id, returned_ids)
 
 
-class TaskDeleteViewTests(TestCase):
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.user1 = CustomUser.objects.create(
-            email="user1@gmail.com", password="abcdef"
-        )
-        self.user2 = CustomUser.objects.create(
-            email="user2@gmail.com", password="ghijkl"
-        )
+class TaskDeleteViewTests(CustomBaseTestCase):
+    """tests for TaskDeleteView"""
 
     def test_task_delete_by_creator_only(self):
+        """task can only be deleted by user who created it"""
         view = views.TaskDeleteView.as_view()
-        task = Task.objects.create(
-            description="task to delete", created_by=self.user1
-        )
+        task = Task.objects.create(description="task to delete", created_by=self.user1)
         request = self.factory.delete(f"tasks/{task.id}")
 
         # delete request by other user

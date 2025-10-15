@@ -22,11 +22,11 @@ from journals.views import TaskDeleteView
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/webhooks/', clerk_webhook),
-    path('tasks/<int:pk>/', TaskDeleteView.as_view(), name='task-delete'),
-    path('users/', include('users.urls')),
-    path('journals/', include('journals.urls')),
-    path('friend-requests/', include('friends.urls')),
-    path('api-auth/', include('rest_framework.urls')),
+    path("admin/", admin.site.urls),
+    path("api/webhooks/", clerk_webhook),
+    path("tasks/<int:pk>/", TaskDeleteView.as_view(), name="task-delete"),
+    path("users/", include("users.urls")),
+    path("journals/", include("journals.urls")),
+    path("friend-requests/", include("friends.urls")),
+    path("api-auth/", include("rest_framework.urls")),
 ]
