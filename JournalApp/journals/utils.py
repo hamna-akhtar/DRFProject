@@ -2,16 +2,13 @@
 
 import re
 import ast
-from llama_cpp import Llama
 
 
-def extract_action_items(journal_text):
+def extract_action_items(llm, journal_text):
     """extract tasks from given journal entry through llm"""
-    llm = Llama(
-        model_path="./llm_models/Phi-3-mini-4k-instruct-q4.gguf",
-        n_ctx=2048,
-        n_threads=8,
-    )
+
+    # print("---------------EXTRACTING NOW")
+
     prompt = f"""
             Extract actionable items (tasks to be done) from the given journal entry.
             Precisely list only all those specific tasks, calls, appointments, or commitments etc that are mentioned in the journal entry, to be done in future.
@@ -24,7 +21,7 @@ def extract_action_items(journal_text):
 
     response = llm(prompt, max_tokens=150, temperature=0.7)
     response_text = response["choices"][0]["text"].strip()
-    print("TASKS--------------------------", response_text)
+    print("TASKS--------------------------\n", response_text)
     # find python list of strings from response
     result_lists = re.findall(r"\[[^\[\]]*['\"][^\[\]]*['\"][^\[\]]*]", response_text)
     if len(result_lists) > 0:

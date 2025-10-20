@@ -3,10 +3,11 @@
 from datetime import datetime
 from rest_framework import permissions
 from rest_framework import generics
+from django.db import transaction
 from .models import JournalEntry, Task
 from .serializers import JournalEntrySerializer, TaskSerializer
-from .utils import extract_action_items
 from .permissions import JournalPermission
+from .tasks import extract_and_create_tasks
 
 
 class TaskDeleteView(generics.DestroyAPIView):
@@ -52,17 +53,7 @@ class JournalEntryListCreateView(generics.ListCreateAPIView):
                 author=self.request.user, created_at=datetime.today(), shared_to=[]
             )
 
-        new_tasks = extract_action_items(journal.content)
-        for task_desc in new_tasks:
-            desc = task_desc.strip()
-            if (
-                desc
-                and desc != "None"
-                and not Task.objects.filter(
-                    created_by=self.request.user, description=desc
-                ).exists()
-            ):
-                Task.objects.create(created_by=self.request.user, description=desc)
+        transaction.on_commit(lambda: extract_and_create_tasks.delay(journal.id))
 
 
 class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -79,17 +70,7 @@ class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
         if access != "custom":
             journal.shared_to.clear()
 
-        new_tasks = extract_action_items(journal.content)
-        for task_desc in new_tasks:
-            desc = task_desc.strip()
-            if (
-                desc
-                and desc != "None"
-                and not Task.objects.filter(
-                    created_by=self.request.user, description=desc
-                ).exists()
-            ):
-                Task.objects.create(created_by=self.request.user, description=desc)
+        transaction.on_commit(lambda: extract_and_create_tasks.delay(journal.id))
 
 
 class MyJournalsView(generics.ListAPIView):

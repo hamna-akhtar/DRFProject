@@ -50,12 +50,13 @@ class JournalEntryListCreateViewTests(CustomBaseTestCase):
         self.assertIn(public.id, returned_ids)
         self.assertIn(shared.id, returned_ids)
 
-    @patch("journals.views.extract_action_items")
-    def test_journal_create_creates_tasks_and_sets_author_and_created_at(
-        self, mock_extract
-    ):
+    @patch("journals.tasks.extract_and_create_tasks.delay")
+    @patch(
+        "journals.views.transaction.on_commit", new=lambda fn: fn()
+    )  # run immediately
+    def test_journal_create_sets_author_and_created_at(self, mock_extract):
         """set author, date, and create extracted tasks on journal entry creation"""
-        mock_extract.return_value = ["Task1", "Task2"]
+        mock_extract.return_value = {"status": "ok", "created_task_ids": [1, 2]}
 
         data = {"title": "title", "content": "abc", "access": "public", "shared_to": []}
         http_request = self.factory.post("journals/", data, format="json")
@@ -68,14 +69,14 @@ class JournalEntryListCreateViewTests(CustomBaseTestCase):
         new_journal = JournalEntry.objects.get(id=response.data["id"])
         self.assertEqual(new_journal.author, self.user1)
         self.assertEqual(new_journal.created_at, date.today())
-        self.assertEqual(Task.objects.filter(created_by=self.user1).count(), 2)
 
-    @patch("journals.views.extract_action_items")
+    @patch("journals.tasks.extract_and_create_tasks.delay")
+    @patch("journals.views.transaction.on_commit", new=lambda fn: fn())
     def test_journal_create_keeps_shared_to_if_custom_access_else_clears(
         self, mock_extract
     ):
         """preserve shared_to list for custom access journals only"""
-        mock_extract.return_value = ["Task1", "Task2"]
+        mock_extract.return_value = {"status": "ok", "created_task_ids": [1, 2]}
         view = views.JournalEntryListCreateView.as_view()
 
         # custom access
@@ -190,12 +191,13 @@ class JournalEntryDetailViewTests(CustomBaseTestCase):
         response = view(request, pk=journal.id)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    @patch("journals.views.extract_action_items")
+    @patch("journals.tasks.extract_and_create_tasks.delay")
+    @patch("journals.views.transaction.on_commit", new=lambda fn: fn())
     def test_journal_update_clears_shared_to_if_access_changed_from_custom(
         self, mock_extract
     ):
         """clear shared_to list if access is updated from custom to public/private"""
-        mock_extract.return_value = ["Task1", "Task2"]
+        mock_extract.return_value = {"status": "ok", "created_task_ids": [1, 2]}
 
         journal = JournalEntry.objects.create(
             title="initial", content="abc", author=self.user1, access="custom"
@@ -216,12 +218,13 @@ class JournalEntryDetailViewTests(CustomBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(journal.shared_to.count(), 0)
 
-    @patch("journals.views.extract_action_items")
+    @patch("journals.tasks.extract_and_create_tasks.delay")
+    @patch("journals.views.transaction.on_commit", new=lambda fn: fn())
     def test_journal_update_keeps_shared_to_if_access_changed_to_custom(
         self, mock_extract
     ):
         """preserve shared_to if access is updated from public/private to custom"""
-        mock_extract.return_value = ["Task1", "Task2"]
+        mock_extract.return_value = {"status": "ok", "created_task_ids": [1, 2]}
 
         journal = JournalEntry.objects.create(
             title="initial", content="abc", author=self.user1, access="private"
@@ -242,10 +245,11 @@ class JournalEntryDetailViewTests(CustomBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(journal.shared_to.count(), 1)
 
-    @patch("journals.views.extract_action_items")
+    @patch("journals.tasks.extract_and_create_tasks.delay")
+    @patch("journals.views.transaction.on_commit", new=lambda fn: fn())
     def test_journal_delete_by_author_only(self, mock_extract):
         """journal entry can be deleted by author only"""
-        mock_extract.return_value = ["Task1", "Task2"]
+        mock_extract.return_value = {"status": "ok", "created_task_ids": [1, 2]}
 
         view = views.JournalEntryDetailView.as_view()
         journal = JournalEntry.objects.create(
