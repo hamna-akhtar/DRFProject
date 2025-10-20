@@ -1,4 +1,7 @@
+""" journals permissions"""
+
 from rest_framework import permissions
+
 
 class JournalPermission(permissions.BasePermission):
     """
@@ -11,14 +14,11 @@ class JournalPermission(permissions.BasePermission):
         if obj.author == request.user:
             return True
 
-        if request.method == 'GET':
+        if request.method == "GET":
             if obj.access == "public":
                 return True
-            elif obj.access == "custom":
+            if obj.access == "custom":
                 return request.user in obj.shared_to.all()
-            elif obj.access == "private":
-                return False
-            else:
+            if obj.access == "private":
                 return False
         return False
-

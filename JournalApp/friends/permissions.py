@@ -1,3 +1,5 @@
+""" friends permissions """
+
 from rest_framework import permissions
 
 
@@ -12,10 +14,10 @@ class IsRequesterOrReceiverOrCreateOnly(permissions.BasePermission):
         if request.method == "POST":
             return True
 
-        if request.method == "DELETE" or request.method == "GET":
-            return obj.requested_by == request.user or obj.requested_to == request.user
+        if request.method in ("DELETE", "GET"):
+            return request.user in (obj.requested_by, obj.requested_to)
 
-        if  request.method == "PUT" or request.method == "PATCH":
+        if request.method in ("PUT", "PATCH"):
             return obj.requested_to == request.user
 
         return False
