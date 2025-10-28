@@ -44,6 +44,7 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["127.0.0.1"])
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -51,11 +52,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "corsheaders",
-    "rest_framework",
     # 'JournalShare',
     "users",
     "friends",
     "journals",
+    "chat",
+    "channels",
+    "rest_framework",
 ]
 
 MIDDLEWARE = [
@@ -86,7 +89,16 @@ TEMPLATES = [
     },
 ]
 
+ASGI_APPLICATION = "JournalApp.asgi.application"
 WSGI_APPLICATION = "JournalApp.wsgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        # "CONFIG": {"hosts": [("127.0.0.1", 6379)]},
+        "CONFIG": {"hosts": [("redis", 6379)]},
+    },
+}
 
 
 # Database
@@ -106,11 +118,9 @@ DATABASES = {
 # Celery
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/0")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://redis:6379/1")
-# CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
-# CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/1")
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 600
-CELERY_TASK_SOFT_TIME_LIMIT = 240
+# CELERY_TASK_SOFT_TIME_LIMIT = 600
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
