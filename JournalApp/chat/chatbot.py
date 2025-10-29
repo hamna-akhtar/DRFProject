@@ -1,37 +1,216 @@
-"""RAG chatbot"""
-from langchain_community.chains import ConversationalRetrievalChain
-from langchain_community.memory import ConversationBufferMemory
-from .llm import Phi3LLM
-from .vector_db_builder import VectorDBBuilder
+"""
+AI chatbot
+get LLM instance, build vector DB for context, generate chatbot response using context
+"""
+
+from llama_cpp import Llama
+from langchain_core.documents import Document
+from langchain_chroma import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
+import re
+from journals.models import JournalEntry, Task
+from users.models import CustomUser
+from friends.models import FriendRequest
 
 
-class RAGChatbot:
-    def __init__(self, user_id):
+LLM = None
+
+
+def get_llm():
+    """get or create LLM instance"""
+    global LLM
+    if LLM is None:
+        print("Loading model...")
+        LLM = Llama(
+            model_path="./llm_models/Phi-3-mini-4k-instruct-q4.gguf",
+            n_ctx=4096,
+            n_threads=4,
+            verbose=False,
+        )
+        print("Model loaded!")
+    return LLM
+
+
+class Chatbot:
+    def __init__(self, user_id: int):
         self.user_id = user_id
-        self.llm = Phi3LLM()
+        self.llm = get_llm()
+        self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        self.vector_store = self._load_or_build_vector_store()
 
-        builder = VectorDBBuilder()
-        self.vector_store = builder.load_for_user(user_id)
-        self.retriever = self.vector_store.as_retriever(search_kwargs={"k": 5})
+    def _load_or_build_vector_store(self):
+        """load existing vector store or build new one"""
+        collection_name = f"user_{self.user_id}"
+        persist_dir = "./chroma_db"
 
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            output_key="answer"
+        # if vector store exists then load existing embeddings
+        client = Chroma(
+            persist_directory=persist_dir, embedding_function=self.embeddings
+        )
+        if any(
+            collection.name == collection_name
+            for collection in client._client.list_collections()
+        ):
+            print(f"Loading existing vector store for user {self.user_id}")
+            return Chroma(
+                collection_name=collection_name,
+                persist_directory=persist_dir,
+                embedding_function=self.embeddings,
+            )
+        else:
+            print(f"Building new vector store for user {self.user_id}")
+            return self._build_vector_store()
+
+    def _build_vector_store(self):
+        """build new vector store from user's data"""
+        documents = []
+
+        # get my profile
+        user = CustomUser.objects.get(id=self.user_id)
+        documents.append(
+            Document(
+                page_content=f"My Profile: {user}",
+                metadata={"type": "my profile"},
+            )
         )
 
-        self.qa_chain = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=self.retriever,
-            memory=self.memory,
-            return_source_documents=False,
-            verbose=False
+        # get journals
+        my_journals = JournalEntry.objects.filter(author=user)
+        public_journals = JournalEntry.objects.filter(access="public").exclude(
+            author=user
+        )
+        shared_with_me = JournalEntry.objects.filter(shared_to=user)
+
+        for entry in my_journals:
+            documents.append(
+                Document(
+                    page_content=f"My Journal Entry from ({entry.created_at}): {entry.content}",
+                    metadata={"type": "journal", "id": str(entry.id)},
+                )
+            )
+        for entry in public_journals:
+            documents.append(
+                Document(
+                    page_content=f"Public Journal Entry from: {entry.created_at}: {entry.content}",
+                    metadata={"type": "journal", "id": str(entry.id)},
+                )
+            )
+        for entry in shared_with_me:
+            documents.append(
+                Document(
+                    page_content=f"Journal shared with me by {entry.author} at {entry.created_at}: {entry.content}",
+                    metadata={"type": "journal", "id": str(entry.id)},
+                )
+            )
+
+        # Get tasks
+        tasks = Task.objects.filter(created_by_id=self.user_id)
+        for task in tasks:
+            documents.append(
+                Document(
+                    page_content=f"Task: {task.description}", metadata={"type": "task"}
+                )
+            )
+
+        # Get friends
+        friends = user.friends.all()
+        for friend in friends:
+            documents.append(
+                Document(
+                    page_content=f"{friend.email} is my friend",
+                    metadata={"type": "friend"},
+                )
+            )
+
+        # Get friend requests sent and received
+        received_requests = FriendRequest.objects.filter(
+            requested_to=self.user_id, accepted=False
+        )
+        for request in received_requests:
+            documents.append(
+                Document(
+                    page_content=f"Unaccepted Friend Request, received from: {request.requested_by}",
+                    metadata={"type": "received friend request"},
+                )
+            )
+
+        sent_requests = FriendRequest.objects.filter(
+            requested_by=self.user_id, accepted=False
+        )
+        for request in sent_requests:
+            documents.append(
+                Document(
+                    page_content=f"Unaccepted Friend Request, sent to: {request.requested_to}",
+                    metadata={"type": "sent friend request"},
+                )
+            )
+
+        if not documents:
+            documents.append(
+                Document(
+                    page_content="No user data yet.", metadata={"type": "placeholder"}
+                )
+            )
+
+        print(f"Creating vector store with {len(documents)} documents")
+
+        return Chroma.from_documents(
+            documents=documents,
+            embedding=self.embeddings,
+            collection_name=f"user_{self.user_id}",
+            persist_directory="./chroma_db",
         )
 
-    def chat(self, message):
-        """send message, get response"""
-        result = self.qa_chain({"question": message})
-        return result["answer"]
+    def chat(self, user_message):
+        """generate response using RAG"""
 
-# def create_chatbot(user_id):
-#     return RAGChatbot(user_id=user_id)
+        # retrieve relevant documents
+        if any(
+            word in user_message.lower()
+            for word in ["all", "list", "multiple", "count", "many", "top", "total"]
+        ):
+            relevant_docs = self.vector_store.similarity_search(
+                user_message, k=len(self.vector_store.get()["ids"])
+            )
+        else:
+            relevant_docs = self.vector_store.similarity_search(user_message, k=3)
+        # print("DOCS\n", relevant_docs)
+
+        # build context from relevant documents
+        context = "\n\n".join([doc.page_content for doc in relevant_docs])
+
+        prompt = f"""
+                <System>
+                You are a helpful AI assistant with access to the user's journal entries and tasks. 
+                Use the context provided below to answer the user's questions precisely starting with <Answer Begin>' and ending with <Answer End>
+                Here is the context from user's data: 
+                {context}
+
+                <User question>
+                {user_message}
+                """
+        # print("PROMPT\n", prompt)
+
+        # generate response
+        response = self.llm(
+            prompt,
+            max_tokens=512,
+            temperature=0.7,
+        )
+        text = response["choices"][0]["text"].strip()
+        print(f"Response: {response}")
+        matches = re.findall(r"<Answer Begin>(.*?)<Answer End>", text, re.DOTALL)
+
+        # get the first non-empty trimmed match
+        extracted_answer = next(
+            (m.strip() for m in matches if m.strip()),
+            "Unable to find anything, please try again.",
+        )
+        print("Extracted Answer:", extracted_answer)
+
+        return extracted_answer
+
+
+def create_chatbot(user_id):
+    """helper to create chatbot"""
+    return Chatbot(user_id=user_id)

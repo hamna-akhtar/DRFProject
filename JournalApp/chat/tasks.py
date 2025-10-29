@@ -5,6 +5,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import traceback
 from .chatbot import create_chatbot
+from .models import ChatMessage
 
 chatbot = None
 
@@ -14,13 +15,14 @@ def generate_response_task(user_id, message, room_name):
     """Generate AI response"""
     global chatbot
     try:
-        # Create chatbot
         if chatbot is None:
             chatbot = create_chatbot(user_id)
-        # Generate response
         response = chatbot.chat(message)
 
-        # Send via WebSocket
+        # send bot response through websocket
+        ChatMessage.objects.create(
+            user_id=user_id, role='bot', content=response
+        )
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             room_name, {"type": "chat_response", "message": response}
@@ -30,8 +32,11 @@ def generate_response_task(user_id, message, room_name):
         print(f"Error generating response: {e}")
         traceback.print_exc()
 
+        ChatMessage.objects.create(
+            user_id=user_id, role='bot', content=f"an error occurred: {str(e)}"
+        )
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             room_name,
-            {"type": "chat_response", "message": f"Sorry, an error occurred: {str(e)}"},
+            {"type": "chat_response", "message": f"an error occurred: {str(e)}"},
         )
