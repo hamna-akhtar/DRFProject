@@ -3,6 +3,7 @@
 from datetime import datetime
 from rest_framework import permissions
 from rest_framework import generics
+from chat.tasks import update_vector_store_for_user
 from .models import FriendRequest
 from .serializers import FriendRequestSerializer, FriendAcceptSerializer
 from .permissions import IsRequesterOrReceiverOrCreateOnly
@@ -28,7 +29,11 @@ class FriendRequestListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         """set the requester and creation date when creating new friend request"""
-        serializer.save(requested_by=self.request.user, created_at=datetime.today())
+        friend_request = serializer.save(requested_by=self.request.user, created_at=datetime.today())
+
+        page_content = f"Unaccepted Friend Request, sent to: {friend_request.requested_to}"
+        metadata = {"type": "sent friend request", "id": str(friend_request.id)}
+        update_vector_store_for_user.delay(self.request.user.id, page_content=page_content, metadata=metadata, action='create')
 
 
 class FriendRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -61,17 +66,49 @@ class FriendRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
                 # Add to each other's friends lists only if not already added
                 if receiver not in requester.friends.all():
                     requester.friends.add(receiver)
+
+                # add friend entry and delete request entry from vector store
+                page_content = f"{requester.email} is my friend"
+                metadata = {"type": "friend", "id": str(requester.id)}
+                update_vector_store_for_user.delay(self.request.user.id, page_content=page_content, metadata=metadata, action='create')
+
+                metadata = {"type": "received friend request", "id": str(friendship_request.id)}
+                update_vector_store_for_user.delay(self.request.user.id, metadata=metadata, action='delete')
+
             else:
                 # Remove from each other's friends lists if the request is unaccepted
                 if receiver in requester.friends.all():
                     requester.friends.remove(receiver)
 
+                # delete friend entry from vector store
+                metadata = {"type": "friend", "id": str(requester.id)}
+                update_vector_store_for_user.delay(self.request.user.id, metadata=metadata, action='delete')
+
+
     def perform_destroy(self, instance):
         """remove friendship if exists, when request is deleted"""
         requester = instance.requested_by
         receiver = instance.requested_to
+
         if instance.accepted:
             requester.friends.remove(receiver)
+
+            # delete friend entry from vector store
+            if receiver.id == self.request.user.id:
+                metadata = {"type": "friend", "id": str(requester.id)}
+            else:
+                metadata = {"type": "friend", "id": str(receiver.id)}
+            update_vector_store_for_user.delay(self.request.user.id, metadata=metadata, action='delete')
+
+        else:
+            # delete request entry from vector store
+            if receiver.id == self.request.user.id:
+                metadata = {"type": "received friend request", "id": str(instance.id)}
+            else:
+                # page_content = f"Unaccepted Friend Request, sent to: {receiver}"
+                metadata = {"type": "sent friend request", "id": str(instance.id)}
+            update_vector_store_for_user.delay(self.request.user.id, metadata=metadata, action='delete')
+
         instance.delete()
 
 

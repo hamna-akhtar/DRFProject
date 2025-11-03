@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from svix.webhooks import Webhook, WebhookVerificationError
 import environ
 from friends.models import FriendRequest
+from chat.tasks import update_vector_store_for_user, delete_vector_store_for_user
 from .models import CustomUser
 from .serializers import UserSerializer
 from .permissions import IsSelfOrReadOnly
@@ -117,7 +118,7 @@ def clerk_webhook(request):
 
         if event_type == "user.updated":
             print("Processing user update...")
-            CustomUser.objects.update_or_create(
+            user, _ = CustomUser.objects.update_or_create(
                 clerk_id=clerk_id,
                 defaults={
                     "email": email,
@@ -125,6 +126,11 @@ def clerk_webhook(request):
                     "last_name": last_name or "",
                 },
             )
+
+            page_content = f"My Profile: {user}"
+            metadata = {"type": "my profile", "id":str(user.id)}
+            update_vector_store_for_user.delay(user.id, page_content=page_content, metadata=metadata, action='update')
+
         elif event_type == "user.created":
             print("Processing user creation...")
             CustomUser.objects.get_or_create(
@@ -136,9 +142,12 @@ def clerk_webhook(request):
                 },
             )
 
+
         elif event_type == "user.deleted":
             print("Processing user deletion...")
-            CustomUser.objects.filter(clerk_id=clerk_id).delete()
+            user = CustomUser.objects.filter(clerk_id=clerk_id)
+            delete_vector_store_for_user(user.id)
+            user.delete()
 
         return JsonResponse({"status": "success", "event": event_type}, status=200)
 

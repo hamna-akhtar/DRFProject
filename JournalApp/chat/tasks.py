@@ -4,22 +4,80 @@ from celery import shared_task
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import traceback
+from langchain_core.documents import Document
+from langchain_chroma import Chroma
+from chromadb.errors import NotFoundError
 from .chatbot import create_chatbot
 from .models import ChatMessage
 
-chatbot = None
+
+def delete_from_store(store, metadata):
+    try:
+        # get all docs with specific id and type
+        results = store.get(where={"id": metadata["id"]})
+        if results:
+            ids_to_delete = []
+            for doc_id, md in zip(results["ids"], results["metadatas"]):
+                if md.get("type") == metadata["type"]:
+                    ids_to_delete.append(doc_id)
+
+            # delete matching docs by internal chroma ids
+            if ids_to_delete:
+                store.delete(ids=ids_to_delete)
+                print("Deleted")
+    except NotFoundError as e:
+        print(f"Can't find id {metadata["id"]} in vector store:\n", e)
+
+
+@shared_task
+def update_vector_store_for_user(user_id, page_content=None, metadata=None, action=None):
+    """update an existing user's vector store whenever changes made in db"""
+
+    chatbot = create_chatbot(user_id)
+    store = chatbot.vector_store
+    print(f"updating store for user {user_id}...........")
+
+    if action == 'create':
+        new_doc = Document(page_content=page_content, metadata=metadata)
+        store.add_documents([new_doc])
+        print("doc created")
+
+    if action == 'update':
+        delete_from_store(store, metadata)
+        new_doc = Document(page_content=page_content, metadata=metadata)
+        store.add_documents([new_doc])
+        print('doc updated')
+
+    if action == 'delete':
+        delete_from_store(store, metadata)
+        print("doc deleted")
+
+    # results = store.get(where={"type": metadata["type"]})
+    # print("AFTER UPDATE--------------------------\n", results)
+
+
+@shared_task
+def delete_vector_store_for_user(user_id):
+    """delete vector store for user"""
+    chatbot = create_chatbot(user_id)
+    collection_name = f"user_{user_id}"
+    client = Chroma(persist_directory="./chroma_db", embedding_function=chatbot.embeddings)
+
+    if any(collection.name == collection_name for collection in client._client.list_collections()):
+        client._client.delete_collection(collection_name)
+
+    del chatbot
 
 
 @shared_task
 def generate_response_task(user_id, message, room_name):
     """Generate AI response"""
-    global chatbot
+
     try:
-        if chatbot is None:
-            chatbot = create_chatbot(user_id)
+        chatbot = create_chatbot(user_id)
         response = chatbot.chat(message)
 
-        # send bot response through websocket
+        # save bot response in db and send through websocket
         ChatMessage.objects.create(
             user_id=user_id, role='bot', content=response
         )

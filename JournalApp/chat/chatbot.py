@@ -3,63 +3,21 @@ AI chatbot
 get LLM instance, build vector DB for context, generate chatbot response using context
 """
 
-from llama_cpp import Llama
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import re
+from JournalApp.celery import ask_llm
 from journals.models import JournalEntry, Task
 from users.models import CustomUser
 from friends.models import FriendRequest
 
 
-LLM = None
-
-
-def get_llm():
-    """get or create LLM instance"""
-    global LLM
-    if LLM is None:
-        print("Loading model...")
-        LLM = Llama(
-            model_path="./llm_models/Phi-3-mini-4k-instruct-q4.gguf",
-            n_ctx=4096,
-            n_threads=4,
-            verbose=False,
-        )
-        print("Model loaded!")
-    return LLM
-
-
 class Chatbot:
-    def __init__(self, user_id: int):
+    def __init__(self, user_id):
         self.user_id = user_id
-        self.llm = get_llm()
         self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        self.vector_store = self._load_or_build_vector_store()
-
-    def _load_or_build_vector_store(self):
-        """load existing vector store or build new one"""
-        collection_name = f"user_{self.user_id}"
-        persist_dir = "./chroma_db"
-
-        # if vector store exists then load existing embeddings
-        client = Chroma(
-            persist_directory=persist_dir, embedding_function=self.embeddings
-        )
-        if any(
-            collection.name == collection_name
-            for collection in client._client.list_collections()
-        ):
-            print(f"Loading existing vector store for user {self.user_id}")
-            return Chroma(
-                collection_name=collection_name,
-                persist_directory=persist_dir,
-                embedding_function=self.embeddings,
-            )
-        else:
-            print(f"Building new vector store for user {self.user_id}")
-            return self._build_vector_store()
+        self.vector_store = self._build_vector_store()
 
     def _build_vector_store(self):
         """build new vector store from user's data"""
@@ -70,7 +28,7 @@ class Chatbot:
         documents.append(
             Document(
                 page_content=f"My Profile: {user}",
-                metadata={"type": "my profile"},
+                metadata={"type": "my profile", "id":str(self.user_id)},
             )
         )
 
@@ -108,7 +66,8 @@ class Chatbot:
         for task in tasks:
             documents.append(
                 Document(
-                    page_content=f"Task: {task.description}", metadata={"type": "task"}
+                    page_content=f"Task: {task.description}",
+                    metadata={"type": "task", "id":str(task.id)},
                 )
             )
 
@@ -118,7 +77,7 @@ class Chatbot:
             documents.append(
                 Document(
                     page_content=f"{friend.email} is my friend",
-                    metadata={"type": "friend"},
+                    metadata={"type": "friend", "id": str(friend.id)},
                 )
             )
 
@@ -130,7 +89,7 @@ class Chatbot:
             documents.append(
                 Document(
                     page_content=f"Unaccepted Friend Request, received from: {request.requested_by}",
-                    metadata={"type": "received friend request"},
+                    metadata={"type": "received friend request", "id": str(request.id)},
                 )
             )
 
@@ -141,24 +100,40 @@ class Chatbot:
             documents.append(
                 Document(
                     page_content=f"Unaccepted Friend Request, sent to: {request.requested_to}",
-                    metadata={"type": "sent friend request"},
+                    metadata={"type": "sent friend request", "id": str(request.id)},
                 )
             )
 
         if not documents:
             documents.append(
                 Document(
-                    page_content="No user data yet.", metadata={"type": "placeholder"}
+                    page_content="No user data yet.", metadata={"type": "placeholder", "id": "None"},
                 )
             )
 
-        print(f"Creating vector store with {len(documents)} documents")
+        # if vector store exists then load else create new
+        persist_dir = "./chroma_db"
+        collection_name = f"user_{self.user_id}"
+        client = Chroma(
+            persist_directory=persist_dir, embedding_function=self.embeddings
+        )
+        if any(
+                collection.name == collection_name
+                for collection in client._client.list_collections()
+            ):
+                print(f"Loading existing vector store for user {self.user_id}")
+                return Chroma(
+                    collection_name=collection_name,
+                    persist_directory=persist_dir,
+                    embedding_function=self.embeddings,
+                )
 
+        print(f"Building new vector store for user {self.user_id}")
         return Chroma.from_documents(
             documents=documents,
             embedding=self.embeddings,
-            collection_name=f"user_{self.user_id}",
-            persist_directory="./chroma_db",
+            collection_name=collection_name,
+            persist_directory=persist_dir,
         )
 
     def chat(self, user_message):
@@ -191,12 +166,7 @@ class Chatbot:
                 """
         # print("PROMPT\n", prompt)
 
-        # generate response
-        response = self.llm(
-            prompt,
-            max_tokens=512,
-            temperature=0.7,
-        )
+        response = ask_llm(prompt)
         text = response["choices"][0]["text"].strip()
         print(f"Response: {response}")
         matches = re.findall(r"<Answer Begin>(.*?)<Answer End>", text, re.DOTALL)
@@ -206,7 +176,7 @@ class Chatbot:
             (m.strip() for m in matches if m.strip()),
             "Unable to find anything, please try again.",
         )
-        print("Extracted Answer:", extracted_answer)
+        # print("Extracted Answer:", extracted_answer)
 
         return extracted_answer
 

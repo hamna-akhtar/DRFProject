@@ -58,7 +58,7 @@ sympy==1.14.0
 types-python-dateutil==2.9.0.20250822
 typing-inspection==0.4.1
 typing_extensions==4.15.0
-torch==2.9.0+cpu
+torch==2.9.0
 urllib3==2.5.0
 websocket-client==1.9.0
 websockets==15.0.1

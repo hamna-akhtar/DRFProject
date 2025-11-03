@@ -95,8 +95,9 @@ WSGI_APPLICATION = "JournalApp.wsgi.application"
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [(env("CELERY_CONFIG"), 6379)]},
         # "CONFIG": {"hosts": [("127.0.0.1", 6379)]},
-        "CONFIG": {"hosts": [("redis", 6379)]},
+        # "CONFIG": {"hosts": [("redis", 6379)]},
     },
 }
 
@@ -120,7 +121,7 @@ CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/0")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://redis:6379/1")
 CELERY_TASK_TRACK_STARTED = True
 # CELERY_TASK_TIME_LIMIT = 600
-CELERY_TASK_SOFT_TIME_LIMIT = 400
+CELERY_TASK_SOFT_TIME_LIMIT = 600
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

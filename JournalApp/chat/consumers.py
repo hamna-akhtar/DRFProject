@@ -3,6 +3,8 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from asgiref.sync import sync_to_async
+from .chatbot import create_chatbot
 from .tasks import generate_response_task
 from .models import ChatMessage
 
@@ -109,7 +111,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def load_chat_history(self):
-        """load all chat messages for this user's current session"""
+        """load all chat messages for this user"""
         messages = ChatMessage.objects.filter(user_id=self.user_id).order_by(
             "created_at"
         )

@@ -2,9 +2,10 @@
 
 import re
 import ast
+from JournalApp.celery import ask_llm
 
 
-def extract_action_items(llm, journal_text):
+def extract_action_items(journal_text):
     """extract tasks from given journal entry through llm"""
 
     # print("---------------EXTRACTING NOW")
@@ -19,7 +20,7 @@ def extract_action_items(llm, journal_text):
             Actionable items (your response should be formatted as a single python list of strings):
             """
 
-    response = llm(prompt, max_tokens=150, temperature=0.7)
+    response = ask_llm(prompt)
     response_text = response["choices"][0]["text"].strip()
     print("TASKS--------------------------\n", response_text)
     # find python list of strings from response
