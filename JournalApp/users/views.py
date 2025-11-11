@@ -128,8 +128,10 @@ def clerk_webhook(request):
             )
 
             page_content = f"My Profile: {user}"
-            metadata = {"type": "my profile", "id":str(user.id)}
-            update_vector_store_for_user.delay(user.id, page_content=page_content, metadata=metadata, action='update')
+            metadata = {"type": "my profile", "id": str(user.id)}
+            update_vector_store_for_user.delay(
+                user.id, page_content=page_content, metadata=metadata, action="update"
+            )
 
         elif event_type == "user.created":
             print("Processing user creation...")
@@ -142,12 +144,12 @@ def clerk_webhook(request):
                 },
             )
 
-
         elif event_type == "user.deleted":
             print("Processing user deletion...")
-            user = CustomUser.objects.filter(clerk_id=clerk_id)
-            delete_vector_store_for_user(user.id)
-            user.delete()
+            user = CustomUser.objects.get(clerk_id=clerk_id)
+            if user:
+                delete_vector_store_for_user(user.id)
+                user.delete()
 
         return JsonResponse({"status": "success", "event": event_type}, status=200)
 

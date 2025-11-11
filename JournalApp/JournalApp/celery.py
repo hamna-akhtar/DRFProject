@@ -3,8 +3,8 @@
 import os
 from celery import Celery
 from celery import shared_task
-from llama_cpp import Llama
-
+import requests
+from JournalApp.settings import LLM_SERVICE_API_KEY, LLM_SERVICE_URL
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "JournalApp.settings")
@@ -12,27 +12,18 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "JournalApp.settings")
 app = Celery("JournalApp")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-LLM = None
+
 @shared_task
 def ask_llm(prompt):
-    global LLM
-    if LLM is None:
-        print("Loading model...")
-        LLM = Llama(
-            model_path="./llm_models/Phi-3-mini-4k-instruct-q4.gguf",
-            n_ctx=4096,
-            n_threads=4,
-            verbose=False,
-        )
-        print("Model loaded!")
-
-    # generate response
-    response = LLM(
-        prompt,
-        max_tokens=512,
-        temperature=0.7,
+    print("requesting llm......")
+    response = requests.post(
+        f"{LLM_SERVICE_URL}/generate",
+        json={"prompt": prompt},
+        headers={"X-API-Key": LLM_SERVICE_API_KEY, "Content-Type": "application/json"},
+        timeout=800,
     )
-    return response
+    # print("service response: ", response.json())
+    return response.json()
 
 
 app.autodiscover_tasks()

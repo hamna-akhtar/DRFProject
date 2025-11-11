@@ -13,10 +13,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 import environ
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+import posthog
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -171,3 +173,17 @@ AUTH_USER_MODEL = "users.CustomUser"
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=True)
+
+
+#
+# sentry_sdk.init(
+#     dsn="https://b5f383e53426e2c795a2da60eb359936@o4510306193440768.ingest.us.sentry.io/4510306196455424",
+#     integrations=[DjangoIntegration()],
+#     traces_sample_rate=1.0,
+#     send_default_pii=True
+# )
+
+posthog.api_key = "phc_BgsSryYZJ9OWwgkKKzNsczwfgDFrZQWKAzn9TYE0Jld"
+posthog.host = "https://us.i.posthog.com"
+LLM_SERVICE_URL = env.str("LLM_SERVICE_URL")
+LLM_SERVICE_API_KEY = env.str("LLM_SERVICE_API_KEY")

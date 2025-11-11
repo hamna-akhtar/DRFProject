@@ -1,0 +1,5 @@
+fastapi==0.119.0
+uvicorn==0.37.0
+pydantic==2.11.7
+llama_cpp_python[server]==0.3.16
+djangorestframework==3.16.1

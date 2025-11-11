@@ -3,8 +3,7 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from asgiref.sync import sync_to_async
-from .chatbot import create_chatbot
+import posthog
 from .tasks import generate_response_task
 from .models import ChatMessage
 
@@ -18,6 +17,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         """websocket connect"""
         self.user = self.scope["user"]
+        self.user_email = self.user.email
         if self.user.is_anonymous:
             await self.close()
             return
@@ -86,11 +86,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not user_message:
             return
 
+        # posthog.capture(
+        #     distinct_id=self.user_email,
+        #     event='user sent msg',
+        #     properties={
+        #         "user_id": self.user_id,
+        #         "user_email": self.user_email,
+        #         "channel_name": self.channel_name,
+        #         "group_name": self.group_name,
+        #         "user_message": user_message
+        #     }
+        # )
+
         await self.save_message_to_db("user", user_message)
         await self.send(json.dumps({"type": "typing", "is_typing": True}))
 
         generate_response_task.delay(self.user_id, user_message, self.group_name)
-
 
     async def chat_response(self, event):
         """celery sent a response"""

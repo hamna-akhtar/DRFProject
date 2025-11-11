@@ -32,11 +32,18 @@ def extract_and_create_tasks(journal_id):
                 created_by=journal.author, description=desc
             ).exists()
         ):
-            t = Task.objects.create(created_by=journal.author, description=desc)
+            t = Task.objects.create(
+                created_by=journal.author, description=desc, from_journal=journal
+            )
             created.append(t.id)
 
-            page_content=f"Task: {t.description}"
-            metadata={"type": "task", "id": str(t.id)}
-            update_vector_store_for_user.delay(journal.author.id, page_content=page_content, metadata=metadata, action='create')
+            page_content = f"Task: {t.description}"
+            metadata = {"type": "task", "id": str(t.id)}
+            update_vector_store_for_user.delay(
+                journal.author.id,
+                page_content=page_content,
+                metadata=metadata,
+                action="create",
+            )
 
     return {"status": "ok", "created_task_ids": created}

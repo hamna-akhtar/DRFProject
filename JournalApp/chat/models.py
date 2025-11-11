@@ -1,5 +1,7 @@
 """chat models"""
+
 from django.db import models
+
 
 class ChatMessage(models.Model):
     """store all chat messages"""
