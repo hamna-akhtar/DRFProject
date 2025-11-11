@@ -4,6 +4,7 @@ from datetime import datetime
 from rest_framework import permissions
 from rest_framework import generics
 from django.db import transaction
+from chat.tasks import update_vector_store_for_user
 from .models import JournalEntry, Task
 from .serializers import JournalEntrySerializer, TaskSerializer
 from .permissions import JournalPermission
@@ -19,6 +20,14 @@ class TaskDeleteView(generics.DestroyAPIView):
     def get_queryset(self):
         """restrict queryset to tasks by currently authenticated user only"""
         return Task.objects.filter(created_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        metadata = {"type": "task", "id": str(instance.id)}
+        update_vector_store_for_user.delay(
+            self.request.user.id, metadata=metadata, action="delete"
+        )
+
+        instance.delete()
 
 
 class JournalEntryListCreateView(generics.ListCreateAPIView):
@@ -53,7 +62,16 @@ class JournalEntryListCreateView(generics.ListCreateAPIView):
                 author=self.request.user, created_at=datetime.today(), shared_to=[]
             )
 
-        transaction.on_commit(lambda: extract_and_create_tasks.delay(journal.id))
+        extract_and_create_tasks.delay_on_commit(journal.id)
+
+        page_content = f"My Journal Entry from: {journal.created_at}: {journal.content}"
+        metadata = {"type": "journal", "id": str(journal.id)}
+        update_vector_store_for_user.delay(
+            journal.author.id,
+            page_content=page_content,
+            metadata=metadata,
+            action="create",
+        )
 
 
 class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -70,7 +88,24 @@ class JournalEntryDetailView(generics.RetrieveUpdateDestroyAPIView):
         if access != "custom":
             journal.shared_to.clear()
 
-        transaction.on_commit(lambda: extract_and_create_tasks.delay(journal.id))
+        extract_and_create_tasks.delay_on_commit(journal.id)
+
+        page_content = f"My Journal Entry from: {journal.created_at}: {journal.content}"
+        metadata = {"type": "journal", "id": str(journal.id)}
+        update_vector_store_for_user.delay(
+            journal.author.id,
+            page_content=page_content,
+            metadata=metadata,
+            action="update",
+        )
+
+    def perform_destroy(self, instance):
+        metadata = {"type": "journal", "id": str(instance.id)}
+        update_vector_store_for_user.delay(
+            instance.author.id, metadata=metadata, action="delete"
+        )
+
+        instance.delete()
 
 
 class MyJournalsView(generics.ListAPIView):
@@ -81,7 +116,9 @@ class MyJournalsView(generics.ListAPIView):
 
     def get_queryset(self):
         """only journals created by currently authenticated user are included in queryset"""
-        my_journals = JournalEntry.objects.filter(author=self.request.user)
+        my_journals = JournalEntry.objects.filter(author=self.request.user).order_by(
+            "created_at"
+        )
         return my_journals
 
 
@@ -93,7 +130,11 @@ class SharedWithMeView(generics.ListAPIView):
 
     def get_queryset(self):
         """only journals shared to currently authenticated user are included in queryset"""
-        shared = JournalEntry.objects.all().filter(shared_to=self.request.user)
+        shared = (
+            JournalEntry.objects.all()
+            .filter(shared_to=self.request.user)
+            .order_by("created_at")
+        )
         return shared
 
 
@@ -109,5 +150,5 @@ class PublicJournalsView(generics.ListAPIView):
             JournalEntry.objects.all()
             .filter(access="public")
             .exclude(author=self.request.user)
-        )
+        ).order_by("created_at")
         return public

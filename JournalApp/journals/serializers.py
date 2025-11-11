@@ -18,6 +18,7 @@ class JournalEntrySerializer(serializers.ModelSerializer):
     shared_to = serializers.PrimaryKeyRelatedField(
         queryset=CustomUser.objects.none(), many=True, write_only=True
     )
+    tasks = serializers.SerializerMethodField(method_name="get_tasks")
 
     class Meta:
         model = JournalEntry
@@ -29,6 +30,7 @@ class JournalEntrySerializer(serializers.ModelSerializer):
             "content",
             "access",
             "shared_to",
+            "tasks",
         ]
 
     def get_fields(self):
@@ -61,6 +63,15 @@ class JournalEntrySerializer(serializers.ModelSerializer):
                 ).data
         return rep
 
+    def get_tasks(self, instance):
+        # only show related tasks if author of journal
+        user = self.context.get("request").user
+        if user == instance.author:
+            return TaskSerializer(
+                instance.tasks.all(), many=True, context=self.context
+            ).data
+        return []
+
 
 class TaskSerializer(serializers.ModelSerializer):
     """serializer for Task model"""
@@ -70,4 +81,4 @@ class TaskSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Task
-        fields = ["id", "created_at", "created_by", "description"]
+        fields = ["id", "created_at", "created_by", "description", "from_journal"]

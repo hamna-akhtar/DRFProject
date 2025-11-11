@@ -1,18 +1,12 @@
 """ celery tasks """
 
 from celery import shared_task
-from llama_cpp import Llama
+from chat.tasks import update_vector_store_for_user
 from .models import JournalEntry, Task
 from .utils import extract_action_items
 
-LLM = None
 
-
-@shared_task(
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_kwargs={"max_retries": 3},
-)
+@shared_task
 def extract_and_create_tasks(journal_id):
     """
     worker task:
@@ -20,15 +14,6 @@ def extract_and_create_tasks(journal_id):
     extract action items,
     create tasks for new action items
     """
-    global LLM
-    # print("------------------------IN WORKER")
-
-    if LLM is None:
-        LLM = Llama(
-            model_path="./llm_models/Phi-3-mini-4k-instruct-q4.gguf",
-            n_ctx=2048,
-            n_threads=4,
-        )
 
     try:
         journal = JournalEntry.objects.get(id=journal_id)
@@ -37,7 +22,7 @@ def extract_and_create_tasks(journal_id):
         return {"status": "missing"}
 
     created = []
-    new_tasks = extract_action_items(LLM, journal.content)
+    new_tasks = extract_action_items(journal.content)
     for task_desc in new_tasks:
         desc = task_desc.strip()
         if (
@@ -47,7 +32,18 @@ def extract_and_create_tasks(journal_id):
                 created_by=journal.author, description=desc
             ).exists()
         ):
-            t = Task.objects.create(created_by=journal.author, description=desc)
+            t = Task.objects.create(
+                created_by=journal.author, description=desc, from_journal=journal
+            )
             created.append(t.id)
+
+            page_content = f"Task: {t.description}"
+            metadata = {"type": "task", "id": str(t.id)}
+            update_vector_store_for_user.delay(
+                journal.author.id,
+                page_content=page_content,
+                metadata=metadata,
+                action="create",
+            )
 
     return {"status": "ok", "created_task_ids": created}

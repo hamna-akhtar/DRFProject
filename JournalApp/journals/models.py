@@ -31,3 +31,10 @@ class Task(models.Model):
         "users.CustomUser", related_name="tasks", on_delete=models.CASCADE
     )
     description = models.TextField()
+    from_journal = models.ForeignKey(
+        "journals.JournalEntry",
+        related_name="tasks",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
